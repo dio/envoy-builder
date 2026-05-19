@@ -37,6 +37,43 @@ gh workflow run build-envoy.yml \
   -f build_linux_arm64=false
 ```
 
+### Mac mini (local build, GHA release)
+
+`scripts/build-mini.sh` SSHes to `dio@mini`, runs the Envoy build natively on
+the M-series machine, SCPs the binary back, and publishes it as a GitHub release
+asset -- same draft-then-publish pattern as GHA.
+
+```sh
+# minimal
+./scripts/build-mini.sh --sha a1b2c3d4
+
+# full options
+./scripts/build-mini.sh \
+  --sha    a1b2c3d4e5f6 \
+  --repo   your-org/envoy \
+  --patch  https://gist.githubusercontent.com/dio/…/my.patch \
+  --tag    envoy-my-fix-20260519 \
+  --out    ./dist \
+  --jobs   HOST_CPUS
+
+# build only, no release
+./scripts/build-mini.sh --sha main --no-release --out ./dist
+```
+
+Pass `BUILDBUDDY_API_KEY` in your shell environment to enable remote cache on mini:
+
+```sh
+export BUILDBUDDY_API_KEY=FtqqkpApeviisA7JL3bz
+./scripts/build-mini.sh --sha a1b2c3d4
+```
+
+The key is forwarded over SSH as an environment variable -- never written to disk
+or shell history on mini. The mini workspace at `~/envoy-builder/{repo}/src/` is
+kept between runs so Bazel's local disk cache accumulates.
+
+**Requirements (local):** `gh` (authenticated), `ssh`, `scp`
+**Mini:** Homebrew. Script auto-installs `bazelisk` + build deps on first run.
+
 ### Remote execution + cache (BuildBuddy)
 
 Envoy's Bazel build is 2-4h cold. BuildBuddy cuts that significantly.
