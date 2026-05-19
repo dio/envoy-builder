@@ -37,18 +37,22 @@ gh workflow run build-envoy.yml \
   -f build_linux_arm64=false
 ```
 
-### Remote cache (BuildBuddy)
+### Remote execution + cache (BuildBuddy)
 
-Envoy's Bazel build is 2-4h cold. A shared remote cache cuts it to ~20-40 min
-on warm builds.
+Envoy's Bazel build is 2-4h cold. BuildBuddy cuts that significantly.
 
-1. Sign up at https://app.buildbuddy.io (free OSS tier, 10 GB cache)
-2. Copy your API key
-3. Add it as a repo secret: `BUILDBUDDY_API_KEY`
+| Platform | Mode | Effect |
+|---|---|---|
+| Linux (amd64 / arm64) | RBE — actions run on BuildBuddy executors | `--jobs=100` parallel actions; GHA runner is just an orchestrator |
+| macOS arm64 | Remote cache only | No macOS executors on BuildBuddy OSS; cache still eliminates redundant rebuilds |
 
-The workflow detects the secret's presence and injects the cache config
-into `.bazelrc` at build time. If the secret is absent, the build falls
-back to local cache (slower but still works).
+Setup:
+1. Sign up at https://app.buildbuddy.io (free OSS tier)
+2. Get an **Executor** API key (Settings → API Keys)
+3. Add it as a repo secret named `BUILDBUDDY_API_KEY`
+
+The workflow detects the secret and injects `.bazelrc.cache` at build time.
+Without it the build falls back to local cache only.
 
 ## Applying a patch
 
