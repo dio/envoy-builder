@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>envoy-builder</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #7c6af7;
+      --accent-dim: #5a50c7;
+      --text: #e2e4ef;
+      --muted: #6b7280;
+      --mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+      --danger: #f87171;
+      --ok: #4ade80;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1rem 6rem;
+    }
+    header {
+      width: 100%;
+      max-width: 680px;
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header h1 span { color: var(--accent); }
+    header p { color: var(--muted); font-size: 0.9rem; margin-top: 0.4rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 680px;
+    }
+    .field { margin-bottom: 1.25rem; }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    label em { text-transform: none; font-style: normal; color: var(--accent); }
+    input[type="text"], input[type="url"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 0.6rem 0.85rem;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="url"]:focus {
+      border-color: var(--accent);
+    }
+    .hint { font-size: 0.76rem; color: var(--muted); margin-top: 0.3rem; }
+    .targets {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .target-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 0.45rem 0.9rem;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .target-chip.selected {
+      border-color: var(--accent);
+      background: rgba(124,106,247,0.08);
+    }
+    .target-chip input { display: none; }
+    .target-chip .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.15s;
+    }
+    .target-chip.selected .dot { background: var(--accent); }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+    .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+    button.primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    button.primary:hover { background: var(--accent-dim); }
+    button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 1.2rem;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    button.secondary:hover { border-color: var(--accent); color: var(--text); }
+    .url-display {
+      display: none;
+      margin-top: 1.5rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .url-display.visible { display: block; }
+    .url-display label { margin-bottom: 0.5rem; }
+    .url-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+    }
+    .url-row a {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      word-break: break-all;
+      flex: 1;
+      line-height: 1.5;
+    }
+    .url-row a:hover { text-decoration: underline; }
+    .copy-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 0.3rem 0.7rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--text); }
+    .copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 1.2rem;
+      font-size: 0.85rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .toast.show { opacity: 1; }
+    .cli-section {
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .cli-section code {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.15rem 0.4rem;
+      color: var(--text);
+    }
+    .cli-section pre {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 0.75rem 1rem;
+      color: var(--ok);
+      margin-top: 0.5rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>envoy<span>-builder</span></h1>
+    <p>Trigger an Envoy binary build on GitHub Actions. Pick your targets, paste a SHA, dispatch.</p>
+  </header>
+
+  <div class="card">
+    <div class="field">
+      <label>Source Repo</label>
+      <input type="text" id="repo" value="envoyproxy/envoy" placeholder="owner/repo" />
+      <div class="hint">Fork? Paste <code>your-org/envoy</code>. Defaults to upstream.</div>
+    </div>
+
+    <div class="field">
+      <label>Commit SHA / Branch / Tag <em>*</em></label>
+      <input type="text" id="sha" placeholder="e.g. a1b2c3d4e5f6... or main or v1.34.0" />
+    </div>
+
+    <div class="field">
+      <label>Patch URL <em>(optional)</em></label>
+      <input type="url" id="patch_url" placeholder="https://gist.githubusercontent.com/…/my.patch" />
+      <div class="hint">Raw URL to a .patch file (git format-patch or diff). Applied before build.</div>
+    </div>
+
+    <div class="field">
+      <label>Release Tag <em>(optional)</em></label>
+      <input type="text" id="release_tag" placeholder="auto: envoy-{sha8}-{date}" />
+    </div>
+
+    <div class="field">
+      <label>Build Targets</label>
+      <div class="targets">
+        <label class="target-chip selected" id="chip-macos-arm64">
+          <input type="checkbox" value="macos-arm64" checked />
+          <span class="dot"></span>
+          macOS arm64
+        </label>
+        <label class="target-chip selected" id="chip-linux-amd64">
+          <input type="checkbox" value="linux-amd64" checked />
+          <span class="dot"></span>
+          Linux amd64
+        </label>
+        <label class="target-chip" id="chip-linux-arm64">
+          <input type="checkbox" value="linux-arm64" />
+          <span class="dot"></span>
+          Linux arm64
+        </label>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <div class="actions">
+      <button class="primary" id="btn-dispatch" onclick="dispatch()">Open in GitHub Actions</button>
+      <button class="secondary" onclick="buildCLI()">Show gh CLI command</button>
+    </div>
+
+    <div class="url-display" id="url-display">
+      <label>Direct dispatch URL</label>
+      <div class="url-row">
+        <a id="dispatch-url" href="#" target="_blank" rel="noopener"></a>
+        <button class="copy-btn" id="copy-btn" onclick="copyURL()">Copy</button>
+      </div>
+    </div>
+
+    <div class="cli-section" id="cli-section" style="display:none">
+      <label style="text-transform:uppercase;font-size:0.74rem;letter-spacing:0.04em;color:var(--muted);font-weight:600;">gh CLI</label>
+      <pre id="cli-cmd"></pre>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ── config ──────────────────────────────────────────────────────────────────
+    // Replace these before deploying.
+    const GH_OWNER = "dio";
+    const GH_REPO  = "envoy-builder";
+    const WORKFLOW = "build-envoy.yml";
+
+    // ── helpers ─────────────────────────────────────────────────────────────────
+    function val(id) { return document.getElementById(id).value.trim(); }
+    function checked(id) { return document.querySelector(`#${id} input`).checked; }
+
+    function toast(msg, duration = 2000) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), duration);
+    }
+
+    function buildInputs() {
+      return {
+        envoy_repo:          val("repo") || "envoyproxy/envoy",
+        commit_sha:          val("sha"),
+        patch_url:           val("patch_url"),
+        release_tag:         val("release_tag"),
+        build_macos_arm64:   checked("chip-macos-arm64")  ? "true" : "false",
+        build_linux_amd64:   checked("chip-linux-amd64")  ? "true" : "false",
+        build_linux_arm64:   checked("chip-linux-arm64")  ? "true" : "false",
+      };
+    }
+
+    function buildDispatchURL(inputs) {
+      const base = `https://github.com/${GH_OWNER}/${GH_REPO}/actions/workflows/${WORKFLOW}`;
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(inputs)) {
+        if (v) params.set(k, v);
+      }
+      return `${base}?${params}`;
+    }
+
+    function dispatch() {
+      const sha = val("sha");
+      if (!sha) { toast("Commit SHA is required"); return; }
+
+      const inputs = buildInputs();
+      const url = buildDispatchURL(inputs);
+
+      // Surface the URL too
+      const display = document.getElementById("url-display");
+      const link = document.getElementById("dispatch-url");
+      link.textContent = url;
+      link.href = url;
+      display.classList.add("visible");
+      document.getElementById("cli-section").style.display = "none";
+
+      window.open(url, "_blank", "noopener");
+    }
+
+    function buildCLI() {
+      const sha = val("sha");
+      if (!sha) { toast("Commit SHA is required"); return; }
+
+      const inputs = buildInputs();
+      const fields = Object.entries(inputs)
+        .filter(([, v]) => v !== "")
+        .map(([k, v]) => `  -f ${k}=${JSON.stringify(v)}`)
+        .join(" \\\n");
+
+      const cmd = `gh workflow run ${WORKFLOW} \\\n  --repo ${GH_OWNER}/${GH_REPO} \\\n${fields}`;
+      document.getElementById("cli-cmd").textContent = cmd;
+      document.getElementById("cli-section").style.display = "block";
+      document.getElementById("url-display").classList.remove("visible");
+    }
+
+    function copyURL() {
+      const url = document.getElementById("dispatch-url").textContent;
+      if (!url || url === "#") { toast("Generate URL first"); return; }
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById("copy-btn");
+        btn.textContent = "Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1500);
+      });
+    }
+
+    // Toggle chip selection
+    document.querySelectorAll(".target-chip").forEach(chip => {
+      chip.addEventListener("click", () => {
+        const cb = chip.querySelector("input");
+        cb.checked = !cb.checked;
+        chip.classList.toggle("selected", cb.checked);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# envoy-builder .gitignore
+.DS_Store
+bazel-*
+/web/dist/
+/web/node_modules/
+*.patch
+.bazelrc.cache
