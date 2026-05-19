@@ -228,12 +228,19 @@ jobs:
 
       - name: Bazel build
         run: |
-          # --config=release sets -c opt + strips debug info.
-          # --//:contrib_enabled=false cuts build time significantly (skip contrib extensions).
-          # Increase parallelism: GHA large runners have 4 vCPUs.
+          # -c opt: optimized build (-O2, no debug assertions).
+          # --config=macos / --config=linux: platform-specific toolchain + path flags.
+          # --strip=always: strip debug info from output binary.
+          # Avoid --config=release — it does not exist in Envoy's .bazelrc.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            PLATFORM_CONFIG="--config=macos"
+          else
+            PLATFORM_CONFIG="--config=linux"
+          fi
           bazel build \
-            --config=release \
-            --//:contrib_enabled=false \
+            -c opt \
+            $PLATFORM_CONFIG \
+            --strip=always \
             --jobs=HOST_CPUS \
             --show_progress_rate_limit=10 \
             ${{ matrix.bazel_target }}
@@ -241,10 +248,13 @@ jobs:
       - name: Locate and rename binary
         id: binary
         run: |
-          # Bazel outputs to bazel-bin/source/exe/
-          src=$(bazel cquery --config=release --output=files ${{ matrix.bazel_target }} 2>/dev/null | head -1)
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            PLATFORM_CONFIG="--config=macos"
+          else
+            PLATFORM_CONFIG="--config=linux"
+          fi
+          src=$(bazel cquery -c opt $PLATFORM_CONFIG --output=files ${{ matrix.bazel_target }} 2>/dev/null | head -1)
           if [ -z "$src" ]; then
-            # Fallback: find it
             src=$(find bazel-bin/source/exe/ -maxdepth 1 -type f -executable | head -1)
           fi
           echo "Found binary at: $src"
