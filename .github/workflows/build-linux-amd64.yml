@@ -1,6 +1,8 @@
-name: Build Envoy
+name: Build Envoy (linux-amd64)
 
 on:
+  schedule:
+    - cron: '0 10 * * *'
   workflow_dispatch:
     inputs:
       sha:
@@ -17,15 +19,6 @@ on:
         description: 'URL to a .patch file to apply before building (optional)'
         required: false
         type: string
-      platform:
-        description: 'Platform to build'
-        required: true
-        default: 'darwin-arm64'
-        type: choice
-        options:
-          - darwin-arm64
-          - linux-arm64
-          - linux-amd64
 
 permissions:
   contents: write
@@ -63,8 +56,6 @@ jobs:
       - name: Build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILDBUDDY_API_KEY_DARWIN_ARM64: ${{ secrets.BUILDBUDDY_API_KEY_DARWIN_ARM64 }}
-          BUILDBUDDY_API_KEY_LINUX_ARM64: ${{ secrets.BUILDBUDDY_API_KEY_LINUX_ARM64 }}
           BUILDBUDDY_API_KEY_LINUX_AMD64: ${{ secrets.BUILDBUDDY_API_KEY_LINUX_AMD64 }}
         run: |
           PATCH_FLAG=""
@@ -76,6 +67,6 @@ jobs:
             --sha "${{ github.event.inputs.sha || 'main' }}" \
             --repo "${{ github.event.inputs.repo || 'envoyproxy/envoy' }}" \
             --host dio@mini \
-            --platform "${{ github.event.inputs.platform }}" \
+            --platform linux-amd64 \
             --gh-repo dio/envoy-builder \
             $PATCH_FLAG
