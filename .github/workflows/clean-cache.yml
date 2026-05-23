@@ -1,0 +1,38 @@
+name: Clean Bazel Cache
+
+on:
+  schedule:
+    - cron: '0 22 * * 0,3'  # Sunday and Wednesday 22:00 UTC
+  workflow_dispatch:
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.MINI_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Install envoy-mini-builder
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download \
+            --repo dio/envoy-mini-builder \
+            --pattern '*linux_amd64*.tar.gz' \
+            --output /tmp/emb.tar.gz
+          tar -xzf /tmp/emb.tar.gz -C /tmp envoy-mini-builder
+          sudo mv /tmp/envoy-mini-builder /usr/local/bin/envoy-mini-builder
+
+      - name: Clean
+        run: envoy-mini-builder clean --host dio@mini
