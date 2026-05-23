@@ -1,319 +1,92 @@
 name: Build Envoy
 
 on:
+  schedule:
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
-      envoy_repo:
-        description: "Source repository (owner/repo). Forks work."
+      sha:
+        description: 'Commit SHA, branch, or tag'
         required: false
-        default: "envoyproxy/envoy"
+        default: 'main'
         type: string
-      commit_sha:
-        description: "Commit SHA, branch, or tag to build"
-        required: true
+      repo:
+        description: 'Source repository (owner/repo)'
+        required: false
+        default: 'envoyproxy/envoy'
         type: string
       patch_url:
-        description: "URL to a .patch file to apply before building (gist raw, pastebin, etc.) -- optional"
+        description: 'URL to a .patch file to apply before building (optional)'
         required: false
         type: string
-      build_macos_arm64:
-        description: "Build macOS arm64"
+      platforms:
+        description: 'Platforms to build'
         required: false
-        default: true
-        type: boolean
-      build_linux_amd64:
-        description: "Build Linux amd64 (static)"
-        required: false
-        default: true
-        type: boolean
-      build_linux_arm64:
-        description: "Build Linux arm64 (static)"
-        required: false
-        default: false
-        type: boolean
-      release_tag:
-        description: "Release tag (auto-generated if empty: envoy-{sha8}-{date})"
-        required: false
-        type: string
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - darwin-arm64
+          - linux-arm64
+          - linux-amd64
 
 permissions:
-  contents: write  # needed to create releases and upload assets
-
-env:
-  BAZELISK_VERSION: "1.25.0"
+  contents: write
 
 jobs:
-  # ─── Phase 1: resolve inputs, create draft release, emit build matrix ────────
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.release_id }}
-      release_tag: ${{ steps.meta.outputs.tag }}
-      short_sha: ${{ steps.meta.outputs.short_sha }}
-      envoy_repo: ${{ steps.meta.outputs.repo }}
-      matrix: ${{ steps.matrix.outputs.json }}
-    steps:
-      - name: Resolve inputs
-        id: meta
-        run: |
-          repo="${{ inputs.envoy_repo }}"
-          repo="${repo#https://github.com/}"
-          repo="${repo%.git}"
-          echo "repo=$repo" >> "$GITHUB_OUTPUT"
-
-          sha="${{ inputs.commit_sha }}"
-          echo "short_sha=${sha:0:8}" >> "$GITHUB_OUTPUT"
-
-          tag="${{ inputs.release_tag }}"
-          if [ -z "$tag" ]; then
-            date="$(date -u +%Y%m%d)"
-            tag="envoy-${sha:0:8}-${date}"
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - name: Build matrix from inputs
-        id: matrix
-        run: |
-          includes='[]'
-          add() {
-            includes=$(echo "$includes" | jq --argjson item "$1" '. + [$item]')
-          }
-
-          if [ "${{ inputs.build_macos_arm64 }}" = "true" ]; then
-            add '{"target":"macos-arm64","os":"macos-15","bazel_target":"//source/exe:envoy","artifact":"envoy-macos-arm64"}'
-          fi
-          if [ "${{ inputs.build_linux_amd64 }}" = "true" ]; then
-            add '{"target":"linux-amd64","os":"ubuntu-24.04","bazel_target":"//source/exe:envoy-static","artifact":"envoy-linux-amd64"}'
-          fi
-          if [ "${{ inputs.build_linux_arm64 }}" = "true" ]; then
-            add '{"target":"linux-arm64","os":"ubuntu-24.04-arm","bazel_target":"//source/exe:envoy-static","artifact":"envoy-linux-arm64"}'
-          fi
-
-          json="{\"include\":$(echo "$includes")}"
-          echo "json=$json" >> "$GITHUB_OUTPUT"
-
-      - name: Create draft release
-        id: create_release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          tag="${{ steps.meta.outputs.tag }}"
-          repo="${{ steps.meta.outputs.repo }}"
-          sha="${{ inputs.commit_sha }}"
-          targets=""
-          [ "${{ inputs.build_macos_arm64 }}" = "true" ]  && targets="$targets macos-arm64"
-          [ "${{ inputs.build_linux_amd64 }}" = "true" ] && targets="$targets linux-amd64"
-          [ "${{ inputs.build_linux_arm64 }}" = "true" ]  && targets="$targets linux-arm64"
-
-          body="## Envoy build
-
-          | Field   | Value |
-          |---------|-------|
-          | Source  | \`${repo}\` |
-          | Commit  | \`${sha}\` |
-          | Targets |${targets} |
-          | Patch   | ${{ inputs.patch_url != '' && inputs.patch_url || '—' }} |
-          | Built   | $(date -u +%Y-%m-%dT%H:%M:%SZ) |
-
-          Binaries built from source. Attach your own \`.bazelrc\` overrides or patches via \`patch_url\`."
-
-          release_id=$(gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/releases \
-            -f tag_name="$tag" \
-            -f name="$tag" \
-            -f body="$body" \
-            -F draft=true \
-            -F prerelease=false \
-            --jq '.id')
-
-          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
-          echo "Created draft release $tag (id=$release_id)"
-
-  # ─── Phase 2: build on each platform ─────────────────────────────────────────
   build:
-    needs: prepare
-    if: ${{ needs.prepare.outputs.matrix != '{"include":[]}' && needs.prepare.outputs.matrix != '{"include":[]}' }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Install Bazelisk (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo curl -fsSL \
-            "https://github.com/bazelbuild/bazelisk/releases/download/v${{ env.BAZELISK_VERSION }}/bazelisk-linux-$(dpkg --print-architecture)" \
-            -o /usr/local/bin/bazel
-          sudo chmod +x /usr/local/bin/bazel
-          bazel version
-
-      - name: Install Bazelisk (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install bazelisk
-          bazel version
-
-      - name: Install build dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            autoconf automake cmake curl git libtool \
-            make ninja-build patch python3 pkg-config \
-            unzip zip zlib1g-dev openjdk-21-jdk-headless
-          # Disk space: GHA runners are tight; clean apt cache
-          sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-
-      - name: Install build dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install automake coreutils libtool cmake ninja
-
-      - name: Free up disk space (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          # GHA ubuntu runners ship with ~25GB free; Envoy needs ~20GB for build outputs.
-          # Trim the fat.
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
-                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          df -h /
-
-      - name: Checkout Envoy
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: ${{ needs.prepare.outputs.envoy_repo }}
-          ref: ${{ inputs.commit_sha }}
-          fetch-depth: 1
-
-      - name: Apply patch
-        if: ${{ inputs.patch_url != '' }}
-        run: |
-          echo "Fetching patch from: ${{ inputs.patch_url }}"
-          curl -fsSL "${{ inputs.patch_url }}" -o /tmp/incoming.patch
-          echo "--- patch stat ---"
-          wc -l /tmp/incoming.patch
-          git apply --stat /tmp/incoming.patch
-          git apply /tmp/incoming.patch
-          echo "Patch applied."
-
-      - name: Write Bazel BuildBuddy config
-        if: ${{ env.BUILDBUDDY_API_KEY != '' }}
-        env:
-          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
-        run: |
-          # Linux: full RBE -- actions execute on BuildBuddy executors.
-          # macOS: cache only -- no macOS executors on BuildBuddy OSS.
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            cat >> .bazelrc.cache << EOF
-          build --remote_executor=grpcs://remote.buildbuddy.io
-          build --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}
-          build --remote_upload_local_results
-          build --remote_timeout=3600
-          build --jobs=100
-          EOF
-            echo "BuildBuddy RBE enabled (Linux)"
-          else
-            cat >> .bazelrc.cache << EOF
-          build --remote_cache=grpcs://remote.buildbuddy.io
-          build --remote_header=x-buildbuddy-api-key=${BUILDBUDDY_API_KEY}
-          build --remote_upload_local_results
-          build --remote_timeout=3600
-          EOF
-            echo "BuildBuddy remote cache enabled (macOS)"
-          fi
-          echo "try-import %workspace%/.bazelrc.cache" >> .bazelrc
-
-      - name: Bazel build
-        run: |
-          # -c opt: optimized build (-O2, no debug assertions).
-          # --config=macos / --config=linux: platform-specific toolchain + path flags.
-          # --strip=always: strip debug info from output binary.
-          # Avoid --config=release — it does not exist in Envoy's .bazelrc.
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            PLATFORM_CONFIG="--config=macos"
-          else
-            PLATFORM_CONFIG="--config=linux"
-          fi
-          bazel build \
-            -c opt \
-            $PLATFORM_CONFIG \
-            --strip=always \
-            --jobs=HOST_CPUS \
-            --show_progress_rate_limit=10 \
-            ${{ matrix.bazel_target }}
-
-      - name: Locate and rename binary
-        id: binary
-        run: |
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            PLATFORM_CONFIG="--config=macos"
-          else
-            PLATFORM_CONFIG="--config=linux"
-          fi
-          src=$(bazel cquery -c opt $PLATFORM_CONFIG --output=files ${{ matrix.bazel_target }} 2>/dev/null | head -1)
-          if [ -z "$src" ]; then
-            src=$(find bazel-bin/source/exe/ -maxdepth 1 -type f -executable | head -1)
-          fi
-          echo "Found binary at: $src"
-          dest="${{ matrix.artifact }}"
-          cp "$src" "$dest"
-          ls -lh "$dest"
-          echo "path=$dest" >> "$GITHUB_OUTPUT"
-
-      - name: Upload to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Content-Type: application/octet-stream" \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }}/assets?name=${{ matrix.artifact }}" \
-            --input "${{ steps.binary.outputs.path }}"
-          echo "Uploaded ${{ matrix.artifact }} to release ${{ needs.prepare.outputs.release_id }}"
-
-  # ─── Phase 3: publish release once all builds succeed ────────────────────────
-  finalize:
-    needs: [prepare, build]
-    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
-      - name: Determine overall result
-        id: result
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Set up SSH key
         run: |
-          if [ "${{ needs.build.result }}" = "success" ]; then
-            echo "all_ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "all_ok=false" >> "$GITHUB_OUTPUT"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.MINI_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Install envoy-mini-builder
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download \
+            --repo dio/envoy-mini-builder \
+            --pattern '*linux_amd64*.tar.gz' \
+            --output /tmp/emb.tar.gz
+          tar -xzf /tmp/emb.tar.gz -C /tmp envoy-mini-builder
+          sudo mv /tmp/envoy-mini-builder /usr/local/bin/envoy-mini-builder
+          envoy-mini-builder --version
+
+      - name: Build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILDBUDDY_API_KEY_DARWIN_ARM64: ${{ secrets.BUILDBUDDY_API_KEY_DARWIN_ARM64 }}
+          BUILDBUDDY_API_KEY_LINUX_ARM64: ${{ secrets.BUILDBUDDY_API_KEY_LINUX_ARM64 }}
+          BUILDBUDDY_API_KEY_LINUX_AMD64: ${{ secrets.BUILDBUDDY_API_KEY_LINUX_AMD64 }}
+        run: |
+          SHA="${{ github.event.inputs.sha || 'main' }}"
+          PLATFORMS="${{ github.event.inputs.platforms || 'all' }}"
+
+          PLATFORM_FLAG="--all-platforms"
+          if [[ "$PLATFORMS" != "all" ]]; then
+            PLATFORM_FLAG="--platform $PLATFORMS"
           fi
 
-      - name: Publish release
-        if: steps.result.outputs.all_ok == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }} \
-            -F draft=false
-          echo "Release ${{ needs.prepare.outputs.release_tag }} published."
+          PATCH_FLAG=""
+          if [[ -n "${{ github.event.inputs.patch_url }}" ]]; then
+            PATCH_FLAG="--patch ${{ github.event.inputs.patch_url }}"
+          fi
 
-      - name: Mark release failed
-        if: steps.result.outputs.all_ok == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            /repos/${{ github.repository }}/releases/${{ needs.prepare.outputs.release_id }} \
-            -f name="${{ needs.prepare.outputs.release_tag }} [FAILED]" \
-            -f body="One or more build targets failed. Check the Actions run for details." \
-            -F draft=false \
-            -F prerelease=true
-          echo "Release marked as failed (prerelease=true)."
-          exit 1
+          envoy-mini-builder build \
+            --sha "$SHA" \
+            --repo "${{ github.event.inputs.repo || 'envoyproxy/envoy' }}" \
+            --host dio@mini \
+            --gh-repo dio/envoy-builder \
+            $PLATFORM_FLAG \
+            $PATCH_FLAG

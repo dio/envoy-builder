@@ -1,133 +1,32 @@
 # envoy-builder
 
-On-demand Envoy binary builds via GitHub Actions.
+Nightly Envoy builds for macOS arm64, Linux arm64, and Linux amd64.
 
-Paste a commit SHA, pick your platforms, get release assets.
+Builds run on a Mac mini via [envoy-mini-builder](https://github.com/dio/envoy-mini-builder).
+The GitHub Actions workflow SSHes to the mini over Tailscale, runs the Bazel build there,
+and publishes the binary as a release asset.
 
-## Inputs
+## Releases
 
-| Input | Required | Default | Notes |
-|---|---|---|---|
-| `envoy_repo` | no | `envoyproxy/envoy` | `owner/repo`, forks work |
-| `commit_sha` | **yes** | — | full or short SHA, branch, tag |
-| `patch_url` | no | — | raw URL to a `.patch` file applied before build |
-| `release_tag` | no | `envoy-{sha8}-{date}` | overrides auto tag |
-| `build_macos_arm64` | no | `true` | macOS M-series |
-| `build_linux_amd64` | no | `true` | static, `ubuntu-24.04` |
-| `build_linux_arm64` | no | `false` | static, `ubuntu-24.04-arm` |
+Binaries are published to the [releases page](https://github.com/dio/envoy-builder/releases).
 
-## Usage
+Asset naming:
 
-### Web UI
+| Platform | Asset |
+|----------|-------|
+| macOS arm64 | `envoy-darwin-arm64` |
+| Linux arm64 | `envoy-linux-arm64` |
+| Linux amd64 | `envoy-linux-amd64` |
 
-Open `web/index.html` -- paste SHA, toggle targets, click **Open in GitHub Actions**.
-The page builds the `workflow_dispatch` URL and opens it. No backend.
+## Trigger a build manually
 
-You can host it on GitHub Pages (repo Settings → Pages → `web/` branch or folder).
+Go to Actions → Build Envoy → Run workflow.
 
-### gh CLI
+Inputs:
 
-```sh
-gh workflow run build-envoy.yml \
-  --repo dio/envoy-builder \
-  -f commit_sha=a1b2c3d4 \
-  -f envoy_repo=envoyproxy/envoy \
-  -f build_macos_arm64=true \
-  -f build_linux_amd64=true \
-  -f build_linux_arm64=false
-```
-
-### Mac mini (local build, GHA release)
-
-`scripts/build-mini.sh` SSHes to `dio@mini`, runs the Envoy build natively on
-the M-series machine, SCPs the binary back, and publishes it as a GitHub release
-asset -- same draft-then-publish pattern as GHA.
-
-```sh
-# minimal
-./scripts/build-mini.sh --sha a1b2c3d4
-
-# full options
-./scripts/build-mini.sh \
-  --sha    a1b2c3d4e5f6 \
-  --repo   your-org/envoy \
-  --patch  https://gist.githubusercontent.com/dio/…/my.patch \
-  --tag    envoy-my-fix-20260519 \
-  --out    ./dist \
-  --jobs   HOST_CPUS
-
-# build only, no release
-./scripts/build-mini.sh --sha main --no-release --out ./dist
-```
-
-Pass `BUILDBUDDY_API_KEY` in your shell environment to enable remote cache on mini:
-
-```sh
-export BUILDBUDDY_API_KEY=FtqqkpApeviisA7JL3bz
-./scripts/build-mini.sh --sha a1b2c3d4
-```
-
-The key is forwarded over SSH as an environment variable -- never written to disk
-or shell history on mini. The mini workspace at `~/envoy-builder/{repo}/src/` is
-kept between runs so Bazel's local disk cache accumulates.
-
-**Requirements (local):** `gh` (authenticated), `ssh`, `scp`
-**Mini:** Homebrew. Script auto-installs `bazelisk` + build deps on first run.
-
-### Remote execution + cache (BuildBuddy)
-
-Envoy's Bazel build is 2-4h cold. BuildBuddy cuts that significantly.
-
-| Platform | Mode | Effect |
-|---|---|---|
-| Linux (amd64 / arm64) | RBE — actions run on BuildBuddy executors | `--jobs=100` parallel actions; GHA runner is just an orchestrator |
-| macOS arm64 | Remote cache only | No macOS executors on BuildBuddy OSS; cache still eliminates redundant rebuilds |
-
-Setup:
-1. Sign up at https://app.buildbuddy.io (free OSS tier)
-2. Get an **Executor** API key (Settings → API Keys)
-3. Add it as a repo secret named `BUILDBUDDY_API_KEY`
-
-The workflow detects the secret and injects `.bazelrc.cache` at build time.
-Without it the build falls back to local cache only.
-
-## Applying a patch
-
-Format your patch with `git format-patch` or `git diff`, upload it somewhere
-with a stable raw URL (GitHub Gist, pastebin, S3, etc.), then pass that URL
-as `patch_url`.
-
-```sh
-git diff HEAD~1 > my-fix.patch
-# upload to gist, get raw URL
-gh workflow run build-envoy.yml \
-  --repo dio/envoy-builder \
-  -f commit_sha=a1b2c3d4 \
-  -f patch_url="https://gist.githubusercontent.com/dio/…/my-fix.patch"
-```
-
-## Outputs
-
-Each build target uploads its binary as a release asset:
-
-| Asset name | Platform |
-|---|---|
-| `envoy-macos-arm64` | macOS arm64 (dynamic, requires local dylibs) |
-| `envoy-linux-amd64` | Linux x86-64, statically linked |
-| `envoy-linux-arm64` | Linux arm64, statically linked |
-
-The release is created as a draft while builds run, then published on
-success. On failure it's published as a prerelease tagged `[FAILED]`.
-
-## Self-hosted Mac runner
-
-For better throughput and zero macOS-runner cost, register a self-hosted
-runner on your Apple Silicon Mac:
-
-```sh
-# In the repo: Settings → Actions → Runners → New self-hosted runner → macOS arm64
-# Follow the download + configure steps, then:
-./run.sh
-```
-
-Change the `build` job's `macos-15` to `self-hosted` for the mac target.
+| Input | Default | Description |
+|-------|---------|-------------|
+| `sha` | `main` | Commit SHA, branch, or tag |
+| `repo` | `envoyproxy/envoy` | Source repo (forks work) |
+| `patch_url` | | Raw URL to a `.patch` file applied before build |
+| `platforms` | `all` | `all`, `darwin-arm64`, `linux-arm64`, `linux-amd64` |
