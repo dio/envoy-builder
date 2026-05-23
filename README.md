@@ -18,15 +18,3 @@ Asset naming:
 | Linux arm64 | `envoy-linux-arm64` |
 | Linux amd64 | `envoy-linux-amd64` |
 
-## Trigger a build manually
-
-Go to Actions → Build Envoy → Run workflow.
-
-Inputs:
-
-| Input | Default | Description |
-|-------|---------|-------------|
-| `sha` | `main` | Commit SHA, branch, or tag |
-| `repo` | `envoyproxy/envoy` | Source repo (forks work) |
-| `patch_url` | | Raw URL to a `.patch` file applied before build |
-| `platforms` | `all` | `all`, `darwin-arm64`, `linux-arm64`, `linux-amd64` |
