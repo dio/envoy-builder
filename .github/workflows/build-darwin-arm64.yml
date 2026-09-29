@@ -20,6 +20,15 @@ on:
         required: false
         type: string
 
+      macos_minimum_os:
+        description: 'Optional minimum macOS version (for example 15.0); requires release_tag'
+        required: false
+        type: string
+      release_tag:
+        description: 'Separate release tag for a deployment-target variant'
+        required: false
+        type: string
+
 permissions:
   contents: write
 
@@ -45,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release download \
+          gh release download v0.7.5 \
             --repo dio/envoy-mini-builder \
             --pattern '*linux_amd64*.tar.gz' \
             --output /tmp/emb.tar.gz
@@ -57,16 +66,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILDBUDDY_API_KEY_DARWIN_ARM64: ${{ secrets.BUILDBUDDY_API_KEY_DARWIN_ARM64 }}
+          SOURCE_SHA: ${{ inputs.sha || 'main' }}
+          SOURCE_REPO: ${{ inputs.repo || 'envoyproxy/envoy' }}
+          PATCH_URL: ${{ inputs.patch_url }}
+          MACOS_MINIMUM_OS: ${{ inputs.macos_minimum_os }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          PATCH_FLAG=""
-          if [[ -n "${{ github.event.inputs.patch_url }}" ]]; then
-            PATCH_FLAG="--patch ${{ github.event.inputs.patch_url }}"
+          args=()
+          if [[ -n "$PATCH_URL" ]]; then
+            args+=(--patch "$PATCH_URL")
           fi
-
+          if [[ -n "$MACOS_MINIMUM_OS" ]]; then
+            [[ "$MACOS_MINIMUM_OS" =~ ^[0-9]+\.[0-9]+$ ]] || { echo 'Invalid macOS version'; exit 1; }
+            [[ -n "$RELEASE_TAG" ]] || { echo 'A deployment-target variant requires a separate release_tag'; exit 1; }
+            args+=("--bazel-arg=--macos_minimum_os=$MACOS_MINIMUM_OS"
+                   "--bazel-arg=--host_macos_minimum_os=$MACOS_MINIMUM_OS"
+                   "--bazel-arg=--copt=-mmacosx-version-min=$MACOS_MINIMUM_OS"
+                   "--bazel-arg=--linkopt=-mmacosx-version-min=$MACOS_MINIMUM_OS"
+                   "--bazel-arg=--define=no_debug_info=1")
+          fi
+          if [[ -n "$RELEASE_TAG" ]]; then
+            args+=(--tag "$RELEASE_TAG")
+          fi
           envoy-mini-builder build \
-            --sha "${{ github.event.inputs.sha || 'main' }}" \
-            --repo "${{ github.event.inputs.repo || 'envoyproxy/envoy' }}" \
+            --sha "$SOURCE_SHA" \
+            --repo "$SOURCE_REPO" \
             --host dio@mini \
             --platform darwin-arm64 \
             --gh-repo dio/envoy-builder \
-            $PATCH_FLAG
+            "${args[@]}"
