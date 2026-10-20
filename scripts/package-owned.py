@@ -50,6 +50,8 @@ def package(binary, receipt, platform, output, license_file, notice_file):
     for key in ('buildProfile', 'buildScriptSha256', 'minimumOS'):
         if key in record:
             provenance[key] = record[key]
+    # Envoy prefixes --version with argv[0], which can be a private checkout path.
+    provenance['version'] = re.sub(r'^.*?\s+version:\s*', 'envoy version: ', record['version'], count=1)
     provenance['platform'] = platform
     provenance['qualification'] = 'See release notes for the tests and supported host baseline.'
     encoded = (json.dumps(provenance, indent=2) + '\n').encode()

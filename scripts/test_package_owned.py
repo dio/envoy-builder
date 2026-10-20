@@ -29,7 +29,7 @@ class PackageTest(unittest.TestCase):
             binary.write_bytes(b'test binary')
             receipt = root / 'receipt.json'
             receipt.write_text(json.dumps(dict(repository='https://github.com/envoyproxy/envoy.git', revision='a'*40,
-                version='envoy '+ 'a'*40, patches=[], binarySha256=module.digest(binary), privatePath='/private/source')))
+                version='/private/source/out/envoy  version: '+ 'a'*40, patches=[], binarySha256=module.digest(binary), privatePath='/private/source')))
             license_file = root / 'LICENSE'
             license_file.write_text('Apache-2.0')
             notice_file = root / 'NOTICE'
@@ -39,7 +39,10 @@ class PackageTest(unittest.TestCase):
             with tarfile.open(out / f'{tag}.tar.gz') as tar:
                 self.assertEqual(tar.getnames(), ['envoy', 'provenance.json', 'LICENSE', 'NOTICE'])
                 self.assertEqual(tar.extractfile('envoy').read(), b'test binary')
-                self.assertNotIn('privatePath', json.load(tar.extractfile('provenance.json')))
+                provenance = json.load(tar.extractfile('provenance.json'))
+                self.assertNotIn('privatePath', provenance)
+                self.assertNotIn('/private/source', json.dumps(provenance))
+                self.assertEqual(provenance['version'], 'envoy version: ' + 'a'*40)
             with self.assertRaisesRegex(ValueError, 'overwrite'):
                 module.package(binary, receipt, 'linux-arm64', out, license_file, notice_file)
             binary.write_bytes(b'changed binary')
