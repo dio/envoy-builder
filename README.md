@@ -75,9 +75,9 @@ release. Publishing the draft is a separate action.
 
 ## macOS Dataplane proxy test package
 
-`brew install dio/tap/dataplane-proxy` installs the matching owned Envoy and
+`brew install --cask dio/tap/dataplane-proxy` installs the matching owned Envoy and
 combined LLM/MCP module as a binary-only pair. The executable is
-`dataplane-envoy`; the module is under `$(brew --prefix dataplane-proxy)/libexec`.
+`dataplane-envoy`; the module is under `$(brew --prefix)/lib/dataplane-proxy`.
 Set `ENVOY_DYNAMIC_MODULES_SEARCH_PATH` to that directory and supply a generated
 Envoy configuration. The Dataplane runtime/management launcher and `dp` CLI are
 not included; installation does not start a service.
@@ -94,6 +94,6 @@ uv run --no-project python scripts/package-proxy.py \
 The packager checks both binary hashes, the clean source revision, macOS deployment
 targets, and successful native serving, REST, and feature-toggle qualification.
 Upload its immutable archive, checksum and provenance as a new prerelease, then
-update `Formula/dataplane-proxy.rb` in `dio/homebrew-tap`. Never replace an old asset.
+update `Casks/dataplane-proxy.rb` in `dio/homebrew-tap`. Never replace an old asset.
 Only Apple Silicon macOS is packaged; macOS 13 is the build target, not a claim
 that qualification ran on macOS 13. Record the actual test OS in release notes.
