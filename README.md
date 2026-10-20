@@ -75,12 +75,25 @@ release. Publishing the draft is a separate action.
 
 ## macOS Dataplane proxy test package
 
-`brew install --cask dio/tap/dataplane-proxy` installs the matching owned Envoy and
-combined LLM/MCP module as a binary-only pair. The executable is
-`dataplane-envoy`; the module is under `$(brew --prefix)/lib/dataplane-proxy`.
-Set `ENVOY_DYNAMIC_MODULES_SEARCH_PATH` to that directory and supply a generated
-Envoy configuration. The Dataplane runtime/management launcher and `dp` CLI are
-not included; installation does not start a service.
+For the unsigned development release, use the checksum-verifying standalone
+installer. It installs only the binary pair and a launcher under `~/.local`,
+without sudo, a compiler, or changes to system Gatekeeper settings:
+
+```sh
+curl -fL https://raw.githubusercontent.com/dio/envoy-builder/main/install.sh -o install.sh
+# Inspect install.sh before executing it.
+bash install.sh
+~/.local/bin/dataplane-envoy --version
+```
+
+Use `--prefix /absolute/path` to choose another location. The launcher sets
+`ENVOY_DYNAMIC_MODULES_SEARCH_PATH` to the matching bundle automatically. Supply
+a Dataplane-generated Envoy configuration; the runtime/management launcher and
+`dp` CLI are not included. Installation does not start a service.
+
+The `dio/tap/dataplane-proxy` cask also downloads the binary pair, but Homebrew
+adds quarantine and macOS blocks these unsigned development artifacts. The
+cask is not the recommended path until Developer ID signing/notarization exists.
 
 After running `make qualify-proxy` from a clean, committed Dataplane checkout:
 
