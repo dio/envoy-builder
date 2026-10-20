@@ -5,3 +5,6 @@ bazel-*
 /web/node_modules/
 *.patch
 .bazelrc.cache
+
+/dist/
+__pycache__/
